@@ -5,42 +5,68 @@ import {
   Polygon,
 } from 'google-maps-react'
 import { constants } from '../../constants'
+import { fetchResponse, getMax, getMin } from '../../helpers'
 
 export class MapContainer extends Component
 {
   state = {
     polygonCoords: [],
-    zoom: 14
+    zoom: 6,
+  }
+
+  componentDidUpdate(prevProps, prevState, snapshot)
+  {
+    const { polygonCoords } = this.state
+
+    if (
+      prevState.polygonCoords
+      && prevState.polygonCoords.length === 3
+      && polygonCoords.length === 4
+    ) {
+      this.getApiInfo()
+    }
   }
 
   onMapClicked = (mapProps, map, clickEvent) => {
     const { polygonCoords } = this.state
+
+    if (polygonCoords.length >= 4) {
+      return
+    }
     console.log({ mapProps, map, clickEvent })
 
-    if (polygonCoords.length < 4) {
-      this.setState(prevState => ({
-        polygonCoords: [
-          ...prevState.polygonCoords,
-          {
-            lat: clickEvent.latLng.lat(),
-            lng: clickEvent.latLng.lng(),
-          },
-        ],
-      }), () => {})
-    }
+    this.setState(prevState => ({
+      polygonCoords: [
+        ...prevState.polygonCoords,
+        {
+          lat: clickEvent.latLng.lat(),
+          lng: clickEvent.latLng.lng(),
+        },
+      ],
+    }))
   }
 
-  getApiInfo = () => {
-    const { polygonCoords, zoom } = this.state
+  getApiRequestCoordinates = () => {
+    const { polygonCoords } = this.state
 
-    const lonLeft = 0;
-    const lonRight = 0;
-    const latTop = 0;
-    const latBottom = 0;
+    const lonLeft = getMin(polygonCoords, 'lng')
+    const lonRight = getMax(polygonCoords, 'lng')
+    const latBottom = getMin(polygonCoords, 'lat')
+    const latTop = getMax(polygonCoords, 'lat')
+
+    return { lonLeft, lonRight, latBottom, latTop }
+  }
+
+  getApiInfo = async () => {
+    const { zoom } = this.state
+    const { lonLeft, lonRight, latBottom, latTop } = this.getApiRequestCoordinates()
 
     const API_URL = 'http://api.openweathermap.org/data/2.5/box/city' +
                     `?bbox=[${lonLeft},${latBottom},${lonRight},${latTop},${zoom}]` +
                     `&appid=${constants.weatherApiKey}`
+
+    const response = await fetchResponse(API_URL)
+    console.log({ response })
   }
 
   render()
