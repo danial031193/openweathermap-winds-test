@@ -2,77 +2,41 @@ import React, { Component } from 'react'
 import {
   Map,
   GoogleApiWrapper,
-  Polygon,
+  Marker,
 } from 'google-maps-react'
 import { constants } from '../../constants'
-import { fetchResponse, getMax, getMin } from '../../helpers'
+import { connect } from 'react-redux'
+import { getWeatherAction } from '../../redux/actionCreators'
 
-export class MapContainer extends Component
+const cities = Object.keys(constants.cities)
+
+export class MapContainerPure extends Component
 {
-  state = {
-    polygonCoords: [],
-    zoom: 6,
+  state = {}
+
+  /**
+   * Set action on map ready
+   */
+  onMapReady = () => {
+    // first request
+    this.fetchCities()
+
+    // repeat request
+    setInterval(this.fetchCities, 5000)
   }
 
-  componentDidUpdate(prevProps, prevState, snapshot)
-  {
-    const { polygonCoords } = this.state
-
-    if (
-      prevState.polygonCoords
-      && prevState.polygonCoords.length === 3
-      && polygonCoords.length === 4
-    ) {
-      this.getApiInfo()
-    }
-  }
-
-  onMapClicked = (mapProps, map, clickEvent) => {
-    const { polygonCoords } = this.state
-
-    if (polygonCoords.length >= 4) {
-      return
-    }
-    console.log({ mapProps, map, clickEvent })
-
-    this.setState(prevState => ({
-      polygonCoords: [
-        ...prevState.polygonCoords,
-        {
-          lat: clickEvent.latLng.lat(),
-          lng: clickEvent.latLng.lng(),
-        },
-      ],
-    }))
-  }
-
-  getApiRequestCoordinates = () => {
-    const { polygonCoords } = this.state
-
-    const lonLeft = getMin(polygonCoords, 'lng')
-    const lonRight = getMax(polygonCoords, 'lng')
-    const latBottom = getMin(polygonCoords, 'lat')
-    const latTop = getMax(polygonCoords, 'lat')
-
-    return { lonLeft, lonRight, latBottom, latTop }
-  }
-
-  getApiInfo = async () => {
-    const { zoom } = this.state
-    const { lonLeft, lonRight, latBottom, latTop } = this.getApiRequestCoordinates()
-
-    const API_URL = 'http://api.openweathermap.org/data/2.5/box/city' +
-                    `?bbox=[${lonLeft},${latBottom},${lonRight},${latTop},${zoom}]` +
-                    `&appid=${constants.weatherApiKey}`
-
-    const response = await fetchResponse(API_URL)
-    console.log({ response })
+  /**
+   * Fetch cities weather
+   */
+  fetchCities = () => {
+    const { getWeather } = this.props
+    getWeather(cities)
   }
 
   render()
   {
-    const { google } = this.props
-    const { polygonCoords, zoom } = this.state
+    const { google, markers } = this.props
+    const zoom = 6
 
     return (
       <Map
@@ -86,22 +50,47 @@ export class MapContainer extends Component
           lat: 42.39,
           lng: -72.52,
         }}
-        className="map"
         zoom={zoom}
-        onClick={this.onMapClicked}
+        onReady={this.onMapReady}
       >
-        <Polygon
-          paths={polygonCoords}
-          strokeColor="#0000FF"
-          strokeOpacity={0.8}
-          strokeWeight={2}
-          fillColor="#0000FF"
-          fillOpacity={0.35} />
+        {markers && markers.map(({ coord: { lat, lon: lng }, wind: { deg: rotation } }, i) => {
+          return (
+            <Marker
+              key={i}
+              position={{ lat, lng, rotation }}
+              options={{
+                icon: {
+                  rotation,
+                  scale: zoom,
+                  path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                  strokeWeight: 1,
+                  fillOpacity: 1,
+                  strokeColor: '#4bef05',
+                },
+              }}
+            />
+          )
+        })}
       </Map>
     )
   }
 }
 
-export default GoogleApiWrapper({
+const MapContainerWithGoogle = GoogleApiWrapper({
   apiKey: (constants.googleApiKey),
-})(MapContainer)
+})(MapContainerPure)
+
+const mapStateToProps = state => ({
+  markers: state.weather,
+})
+
+const mapDispatchToProps = {
+  getWeather: (ids) => getWeatherAction(ids),
+}
+
+const MapContainer = connect(
+  mapStateToProps,
+  mapDispatchToProps,
+)(MapContainerWithGoogle)
+
+export default MapContainer
